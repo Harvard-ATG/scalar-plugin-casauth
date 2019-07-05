@@ -9,7 +9,7 @@
         <script src="<?= confirm_slash(base_url());?>/system/application/views/modules/dashboot/js/bootstrap.min.js"></script>
     </head>
     <body>
-        <div class="well" style="width: 25%; min-width: 400px; margin: 10% auto;">
+        <div class="well" style="width: 25%; min-width: 400px; margin: 5% auto; background: #fff;">
             <div style="width: 100%;">
                 <img style="margin-left: calc(50% - 37.5px); margin-bottom: 20px;" src="<?= confirm_slash(base_url()); ?>/system/application/views/modules/login/scalar_logo.png" alt="scalar_logo" width="75" height="68">
             </div>
