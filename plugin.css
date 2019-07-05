@@ -1,0 +1,15 @@
+.btn-login-select {
+    display: block;
+    text-align: center;
+    width: 100%;
+    font-size: 18px !important;
+}
+.btn-login-cas {
+    padding: 15px;
+    background: #A41034;
+    color: #fff;
+}
+.btn-login-cas:hover {
+    background: #A41034;
+    color: #000;
+}

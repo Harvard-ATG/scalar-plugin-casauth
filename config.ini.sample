@@ -1,0 +1,4 @@
+cas_host = "localhost"
+cas_port = 3004
+cas_context = "/cas"
+cas_button_text = "Login with CAS Server"
