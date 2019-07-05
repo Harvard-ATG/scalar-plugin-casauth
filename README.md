@@ -15,7 +15,10 @@ _Currently a work in progress and will require some minor modifications to Scala
     ├── lib
     ├── login_select.php
     ├── plugin.css
-    └── plugin.ini
+    ├── plugin.ini
+    └── plugin.sql
+    
+    1 directory, 7 files
     ```
 2. Rename `config.ini.sample` to `config.ini` and update the CAS settings to point to your CAS server.
 3. Run the SQL in `plugin.sql` to create the database tables (links CAS ID to a Scalar user ID). 
