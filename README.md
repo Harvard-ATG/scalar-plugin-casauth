@@ -6,23 +6,10 @@ _Currently a work in progress and will require some minor modifications to Scala
 
 ## Quickstart
 
-1. Download and unzip to `system/application/plugins/casauth`. You should have a directory that looks like this:
-    ```
-    casauth/
-    ├── README.md
-    ├── casauth_pi.php
-    ├── config.ini.sample
-    ├── lib
-    ├── login_select.php
-    ├── plugin.css
-    ├── plugin.ini
-    └── plugin.sql
-    
-    1 directory, 7 files
-    ```
+1. Download and unzip to `system/application/plugins/casauth`. 
 2. Rename `config.ini.sample` to `config.ini` and update the CAS settings to point to your CAS server.
-3. Run the SQL in `plugin.sql` to create the database tables (links CAS ID to a Scalar user ID). 
-4. Register plugin in `system/application/config/plugins.php` and add or update this line:
+3. Run the SQL in `plugin.sql` against the database to setup the required tables.
+4. Register the plugin in `system/application/config/plugins.php`. To register, add or update this line:
     ```
     $config['plugins']['auth'] = 'casauth';
     ```
