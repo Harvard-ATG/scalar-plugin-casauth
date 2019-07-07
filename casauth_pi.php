@@ -1,6 +1,7 @@
 <?php
 
 require_once dirname(__FILE__).'/lib/phpCAS/CAS.php';
+require_once dirname(__FILE__).'/casauth_model.php';
 
 class Casauth {
 
@@ -20,6 +21,16 @@ class Casauth {
     public $config = array();
 
     /**
+     * @var object Holds controller instance via get_instance()
+     */
+    public $ci = null;
+
+    /**
+     * @var object Holds CI_Model instance
+     */
+    public $model = null;
+
+    /**
      * Casauth constructor.
      *
      * Loads configuration from config.ini or throw an exception.
@@ -29,21 +40,28 @@ class Casauth {
     public function __construct() {
         $this->plugin_name = strtolower(get_class($this));
         $this->plugin_path = "system/application/plugins/{$this->plugin_name}";
+
         $this->config = parse_ini_file(dirname(__FILE__).'/config.ini');
         if($this->config === FALSE) {
             throw new Exception("Casauth plugin misconfigured: config.ini required");
         }
+
+        $this->model = new Casauth_model();
     }
 
-    public function init() {}
+    /**
+     * Initialize plugin.
+     */
+    public function init() {
+        $CI =& get_instance();
+        $this->ci = $CI;
+    }
 
     /**
      * Called by the system controller's _remap() method.
      * This is intended to override the system::login() method.
      */
     public function hook_system_login() {
-        $CI =& get_instance();
-
         if(isset($_GET['type'])) {
             $login_type = $_GET['type'];
         } else {
@@ -59,7 +77,7 @@ class Casauth {
                 break;
             case 'default':
             default:
-                $CI->login();
+                $this->ci->login();
                 break;
         }
     }
@@ -97,7 +115,22 @@ class Casauth {
         phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int) $this->config['cas_port'], $this->config['cas_context']);
         $this->_debugAuthenticate();
         phpCAS::forceAuthentication();
-        echo phpCAS::getUser();
+        //$user = phpCAS::getUser();
+
+        $attributes = phpCas::getAttributes();
+        error_log("authenticate attributes:".var_export($attributes,1));
+
+        $this->model->add_new_cas_entry($attributes);
+        $user = $this->ci->users->get_by_email($attributes['mail']);
+        if($user) {
+            $this->model->link_cas_entry_to_scalar_user($attributes['eduPersonPrincipleName'], $user->user_id);
+            $login_basename = confirm_slash(base_url());
+            $result = $user;
+            $result->is_logged_in = true;
+            $this->ci->session->set_userdata(array($login_basename => (array) $result));
+            header("Location: ".$login_basename, TRUE);
+            exit();
+        }
     }
 
     // For debugging locally.
@@ -105,7 +138,7 @@ class Casauth {
         // For debugging/testing only with local mock cas server (https://github.com/veo-labs/cas-server-mock)
         // Using this to explicitly set HTTP URLs
         // See also https://github.com/apereo/phpCAS/issues/27
-        $ip = "localhost";
+        $ip = "10.0.0.0";
         $port = 3004;
         $cas_server = "$ip:$port";
         $service = confirm_slash(base_url())."system/cas_login";
