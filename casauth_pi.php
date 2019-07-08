@@ -64,6 +64,15 @@ class Casauth {
     }
 
     /**
+     * Initializes the phpCas client.
+     */
+    public function init_phpCAS() {
+        phpCAS::setDebug();
+        phpCAS::setVerbose(true);
+        phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
+    }
+
+    /**
      * Get an instance of the model.
      */
     public function get_model() {
@@ -93,6 +102,20 @@ class Casauth {
                 $this->ci->login();
                 break;
         }
+    }
+
+    /**
+     * Called by system controller's _remap() method.
+     * This is intended to override the system::logout() method.
+     *
+     * TODO: Logout is never called because scalar's MY_Controller does it in __construct()
+     *       and then immediately redirects, so the controller logout() method is never actually called.
+     *       We need to find a way to resolve this so that we can logout from CAS too.
+     */
+    public function hook_system_logout() {
+        $this->init_phpCAS();
+        phpCas::logout();
+        $this->ci->logout();
     }
 
     /**
@@ -144,10 +167,8 @@ class Casauth {
         // Handle CAS authentication flow
         // See also: https://apereo.github.io/cas/5.1.x/protocol/CAS-Protocol-Specification.html
         try {
-            phpCAS::setDebug();
-            phpCAS::setVerbose(true);
-            phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
-            $this->_debugAuthenticate();
+            $this->init_phpCAS();
+            $this->_debug_phpCAS();
             phpCAS::forceAuthentication();
         } catch(CAS_Exception $e) {
             error_log($e->getMessage());
@@ -257,7 +278,7 @@ class Casauth {
     }
 
     // For debugging locally.
-    private function _debugAuthenticate() {
+    private function _debug_phpCAS() {
         // For debugging/testing only with local mock cas server (https://github.com/veo-labs/cas-server-mock)
         // Using this to explicitly set HTTP URLs
         // See also https://github.com/apereo/phpCAS/issues/27
