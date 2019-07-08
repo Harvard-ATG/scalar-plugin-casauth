@@ -228,7 +228,7 @@ class Casauth {
     /**
      * Registers a new Scalar user account.
      *
-     * Note: the password is disabled automatically to prevent password-based logins.
+     * Note: the password is disabled by default.
      *
      * @param $casuser
      * @return mixed Returns false if the user is not found, otherwise an array.
