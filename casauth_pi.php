@@ -4,6 +4,11 @@ require_once dirname(__FILE__).'/lib/phpCAS/CAS.php';
 require_once dirname(__FILE__).'/casauth_model.php';
 require_once dirname(__FILE__).'/casauth_exception.php';
 
+/**
+ * Class Casauth
+ *
+ * Scalar Plugin that implements CAS authentication.
+ */
 class Casauth {
 
     /**
@@ -47,7 +52,7 @@ class Casauth {
             throw new Exception("Casauth plugin misconfigured: config.ini required");
         }
 
-        $this->model = new Casauth_model();
+        $this->model = $this->get_model();
     }
 
     /**
@@ -56,6 +61,13 @@ class Casauth {
     public function init() {
         $CI =& get_instance();
         $this->ci = $CI;
+    }
+
+    /**
+     * Get an instance of the model.
+     */
+    public function get_model() {
+        return new Casauth_model();
     }
 
     /**
@@ -93,8 +105,14 @@ class Casauth {
     }
 
     /**
-     * Displays a page for the user to select the type of login.
-     * The page contains links to either the default login page (email/password) or CAS login page.
+     * Select the login type.
+     *
+     * This should display an HTML page with two choices to login:
+     *
+     * 1) Login with email/password
+     * 2) Login with CAS
+     *
+     * Clicking on the link should direct the user to the appropriate login page.
      */
     public function select_login() {
         $redirect_url = isset($_GET['redirect_url']) ? $_GET['redirect_url'] : '';
@@ -105,21 +123,26 @@ class Casauth {
     }
 
     /**
-     * This method handles the CAS authentication flow.
-     * Uses the phpCas library (https://github.com/apereo/phpCAS).
+     * Cas Login Method.
      *
-     * This method will be called in two ways:
+     * This method should be called:
      *
-     * 1) When a new authentication request is initiated. The user will be redirected to the CAS
-     *    server by phpCAS, where the user will authenticate.
+     * 1) To initiate authentication (e.g. send users to CAS server to login).
+     * 2) To process a returning user who has logged in with the CAS server.
      *
-     * 2) When a user is returning from the CAS server with a service ticket. The users's
-     *    ticket will be validated by phpCAS.
+     * These steps are handled by the phpCas Library (https://github.com/apereo/phpCAS).
      *
-     * Assuming the user has been authenticated, the method will proceed to automatically
-     * register the user (if necessary) and log them in to Scalar.
+     * After a user has been authenticated by phpCas (e.g. service ticket validated),
+     * we can proceed to authenticate the user with Scalar itself.
+     *
+     * Assuming a user has an existing account in Scalar, this method will try to
+     * link the CAS login to the Scalar account using the email provided in the CAS attributes.
+     * If it's not possible to link to an existing account, then a new account will
+     * be registered automatically, and the user will be logged in.
      */
     public function cas_login() {
+        // Handle CAS authentication flow
+        // See also: https://apereo.github.io/cas/5.1.x/protocol/CAS-Protocol-Specification.html
         try {
             phpCAS::setDebug();
             phpCAS::setVerbose(true);
@@ -131,15 +154,17 @@ class Casauth {
             show_error($e->getMessage());
         }
 
+        // If we get here, the user has been authenticated with the CAS server,
+        // and we can proceed to log them in to Scalar.
         try {
             list($auth_success, $user_id) = $this->authenticate();
             if($auth_success) {
-                $user = $this->ci->users->get_by_user_id($user_id);
-                if($user) {
-                    $this->login_and_redirect($user);
+                $scalaruser = $this->ci->users->get_by_user_id($user_id);
+                if($scalaruser) {
+                    $this->login_and_redirect($scalaruser);
                 } else {
-                    show_404("Authenticated successfully, but error loading user data [user_id=$user_id]");
-            }
+                    show_404("Login failed. Scalar user $user_id not found!");
+                }
             } else {
                 show_error("Access denied. You are not authorized to access this site.", 403);
             }
@@ -149,16 +174,32 @@ class Casauth {
         }
     }
 
+    /**
+     * Authenticates CAS user.
+     *
+     * Given a successful CAS authentication, when attributes are provided (e.g. name, email),
+     * then those attributes can be used to authenticate the user in Scalar.
+     *
+     * The email will be used to link to an existing Scalar user account on the first login,
+     * otherwise a new account will be created.
+     *
+     * Note that this DOES NOT perform the actual login (e.g update the session).
+     *
+     * @return array Returns a 2-element array with a boolean to indicate a successful authentication,
+     *               and the Scalar user_id if authentication was successful.
+     */
     public function authenticate() {
+        // Retrieve the attributes
         $attributes = phpCas::getAttributes();
-        error_log("authenticate attributes:".var_export($attributes,1));
+        error_log("phpCas attributes:".var_export($attributes,1));
 
-        // Save the attributes returned from the CAS server (e.g. name, email, and EPPN).
+        // Ensure the CAS user has been added to the database.
         $this->model->save_user($attributes);
         $casuser = $this->model->find_by_cas_id($attributes[Casauth_model::$cas_id_attribute]);
         if(!$casuser) {
             throw new CasauthException("Error retrieving CAS login information");
         }
+        $this->model->update_last_login($casuser['cas_id']);
 
         // Check if the CAS User is active and therefore allowed to proceed.
         // By default, new users are active.
@@ -166,7 +207,7 @@ class Casauth {
             return array(false, -1);
         }
 
-        // Check if the CAS User is connected to a Scalar User Account yet.
+        // Check if the CAS User is linked to a Scalar User Account yet.
         // For a first time CAS login, there are two options on how to proceed:
         //      Option #1: link to an existing scalar user account by email
         //      Option #2: register a new scalar user account
@@ -176,27 +217,41 @@ class Casauth {
                 $this->model->link_to_scalar_user($casuser['cas_id'], $existing_scalaruser->user_id);
                 return array(true, $existing_scalaruser->user_id);
             }
-            $registered_scalaruser = $this->register_scalar_user($casuser);
+            $registered_scalaruser = $this->register($casuser);
             return array(true, $registered_scalaruser->user_id);
         }
 
+        // If we get here, the user has logged in before so we simply return the linked Scalar account.
         return array(true, $casuser['user_id']);
     }
 
-    public function register_scalar_user($casuser) {
-        $userdata = array(
+    /**
+     * Registers a new Scalar user account.
+     *
+     * Note: the password is disabled automatically to prevent password-based logins.
+     *
+     * @param $casuser
+     * @return mixed Returns false if the user is not found, otherwise an array.
+     */
+    public function register($casuser) {
+        $data = array(
             'email' => $casuser['email'],
             'fullname' => $casuser['fullname'],
-            'password' => 'DISABLED_PASSWORD',
+            'password' => 'DISABLEDPASSWORD', // not a valid hash, so should prevent password logins
         );
-        $this->ci->users->db->insert($this->ci->users->users_table, $userdata);
+        $this->ci->users->db->insert($this->ci->users->users_table, $data);
         return $this->ci->users->get_by_email($casuser['email']);
     }
 
-    public function login_and_redirect($user) {
+    /**
+     * Performs the actual login by updating the session and redirecting.
+     *
+     * @param $scalaruser
+     */
+    public function login_and_redirect($scalaruser) {
         $login_basename = confirm_slash(base_url());
-        $user->is_logged_in = true;
-        $this->ci->session->set_userdata(array($login_basename => (array) $user));
+        $scalaruser->is_logged_in = true;
+        $this->ci->session->set_userdata(array($login_basename => (array) $scalaruser));
         header("Location: ".$login_basename, TRUE);
         exit();
     }
