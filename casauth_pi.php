@@ -2,6 +2,7 @@
 
 require_once dirname(__FILE__).'/lib/phpCAS/CAS.php';
 require_once dirname(__FILE__).'/casauth_model.php';
+require_once dirname(__FILE__).'/casauth_exception.php';
 
 class Casauth {
 
@@ -73,7 +74,7 @@ class Casauth {
                 $this->select_login();
                 break;
             case 'cas':
-                $this->authenticate();
+                $this->cas_login();
                 break;
             case 'default':
             default:
@@ -88,7 +89,7 @@ class Casauth {
      * to call back to with the service ticket.
      */
     public function hook_system_cas_login() {
-        $this->authenticate();
+        $this->cas_login();
     }
 
     /**
@@ -104,33 +105,100 @@ class Casauth {
     }
 
     /**
-     * This method handles the CAS authentication flow, delegating the work to the phpCAS library.
+     * This method handles the CAS authentication flow.
+     * Uses the phpCas library (https://github.com/apereo/phpCAS).
      *
-     * The intent is to call this when a user is initiating a new CAS login
-     * and when they are returning back from the CAS server with a ticket that needs authenticating.
+     * This method will be called in two ways:
+     *
+     * 1) When a new authentication request is initiated. The user will be redirected to the CAS
+     *    server by phpCAS, where the user will authenticate.
+     *
+     * 2) When a user is returning from the CAS server with a service ticket. The users's
+     *    ticket will be validated by phpCAS.
+     *
+     * Assuming the user has been authenticated, the method will proceed to automatically
+     * register the user (if necessary) and log them in to Scalar.
      */
-    public function authenticate() {
-        phpCAS::setDebug();
-        phpCAS::setVerbose(true);
-        phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int) $this->config['cas_port'], $this->config['cas_context']);
-        $this->_debugAuthenticate();
-        phpCAS::forceAuthentication();
-        //$user = phpCAS::getUser();
+    public function cas_login() {
+        try {
+            phpCAS::setDebug();
+            phpCAS::setVerbose(true);
+            phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
+            $this->_debugAuthenticate();
+            phpCAS::forceAuthentication();
+        } catch(CAS_Exception $e) {
+            error_log($e->getMessage());
+            show_error($e->getMessage());
+        }
 
+        try {
+            list($auth_success, $user_id) = $this->authenticate();
+            if($auth_success) {
+                $user = $this->ci->users->get_by_user_id($user_id);
+                if($user) {
+                    $this->login_and_redirect($user);
+                } else {
+                    show_404("Authenticated successfully, but error loading user data [user_id=$user_id]");
+            }
+            } else {
+                show_error("Access denied. You are not authorized to access this site.", 403);
+            }
+        } catch(CasauthException $e) {
+            error_log($e->getMessage());
+            show_error($e->getMessage());
+        }
+    }
+
+    public function authenticate() {
         $attributes = phpCas::getAttributes();
         error_log("authenticate attributes:".var_export($attributes,1));
 
-        $this->model->add_new_cas_entry($attributes);
-        $user = $this->ci->users->get_by_email($attributes['mail']);
-        if($user) {
-            $this->model->link_cas_entry_to_scalar_user($attributes['eduPersonPrincipleName'], $user->user_id);
-            $login_basename = confirm_slash(base_url());
-            $result = $user;
-            $result->is_logged_in = true;
-            $this->ci->session->set_userdata(array($login_basename => (array) $result));
-            header("Location: ".$login_basename, TRUE);
-            exit();
+        // Save the attributes returned from the CAS server (e.g. name, email, and EPPN).
+        $this->model->save_user($attributes);
+        $casuser = $this->model->find_by_cas_id($attributes[Casauth_model::$cas_id_attribute]);
+        if(!$casuser) {
+            throw new CasauthException("Error retrieving CAS login information");
         }
+
+        // Check if the CAS User is active and therefore allowed to proceed.
+        // By default, new users are active.
+        if(!$casuser['is_active']) {
+            return array(false, -1);
+        }
+
+        // Check if the CAS User is connected to a Scalar User Account yet.
+        // For a first time CAS login, there are two options on how to proceed:
+        //      Option #1: link to an existing scalar user account by email
+        //      Option #2: register a new scalar user account
+        if(!$casuser['user_id']) {
+            $existing_scalaruser = $this->ci->users->get_by_email($casuser['email']);
+            if($existing_scalaruser) {
+                $this->model->link_to_scalar_user($casuser['cas_id'], $existing_scalaruser->user_id);
+                return array(true, $existing_scalaruser->user_id);
+            }
+            $registered_scalaruser = $this->register_scalar_user($casuser);
+            return array(true, $registered_scalaruser->user_id);
+        }
+
+        return array(true, $casuser['user_id']);
+    }
+
+    public function register_scalar_user($casuser) {
+        $userdata = array(
+            'email' => $casuser['email'],
+            'fullname' => $casuser['fullname'],
+            'password' => 'DISABLED_PASSWORD',
+        );
+        $this->ci->users->db->insert($this->ci->users->users_table, $userdata);
+        return $this->ci->users->get_by_email($casuser['email']);
+    }
+
+    public function login_and_redirect($user) {
+        $login_basename = confirm_slash(base_url());
+        $user->is_logged_in = true;
+        $this->ci->session->set_userdata(array($login_basename => (array) $user));
+        header("Location: ".$login_basename, TRUE);
+        exit();
     }
 
     // For debugging locally.
@@ -138,9 +206,7 @@ class Casauth {
         // For debugging/testing only with local mock cas server (https://github.com/veo-labs/cas-server-mock)
         // Using this to explicitly set HTTP URLs
         // See also https://github.com/apereo/phpCAS/issues/27
-        $ip = "10.0.0.0";
-        $port = 3004;
-        $cas_server = "$ip:$port";
+        $cas_server = "140.247.36.150:3004";
         $service = confirm_slash(base_url())."system/cas_login";
         phpCAS::setServerLoginURL("http://$cas_server/login?service=".urlencode($service));
         phpCAS::setServerServiceValidateURL("http://$cas_server/serviceValidate");
