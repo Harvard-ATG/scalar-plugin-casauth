@@ -70,7 +70,7 @@ class Casauth {
         phpCAS::setDebug();
         phpCAS::setVerbose(true);
         phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
-        phpCAS::setNoCasServerValidation();
+        phpCAS::setNoCasServerValidation(); // TODO: Fix this for production
     }
 
     /**
