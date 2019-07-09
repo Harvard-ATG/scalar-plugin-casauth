@@ -9,9 +9,9 @@
         <script src="<?= confirm_slash(base_url());?>/system/application/views/modules/dashboot/js/bootstrap.min.js"></script>
     </head>
     <body>
-        <div class="well" style="width: 25%; min-width: 400px; margin: 5% auto; background: #fff;">
+        <div class="well login" style="margin-top: 5%; background: #fff;">
             <div style="width: 100%;">
-                <img style="margin-left: calc(50% - 37.5px); margin-bottom: 20px;" src="<?= confirm_slash(base_url()); ?>/system/application/views/modules/login/scalar_logo.png" alt="scalar_logo" width="75" height="68">
+                <a href="<?= confirm_slash(base_url()); ?>"><img style="margin-left: calc(50% - 37.5px); margin-bottom: 20px;" src="<?= confirm_slash(base_url()); ?>/system/application/views/modules/login/scalar_logo.png" alt="scalar_logo" width="75" height="68"></a>
             </div>
             <div class="row" style="margin-bottom: 1em;">
                 <div class="col-lg-12">
@@ -23,6 +23,9 @@
                     <a href="<?= $default_login_url ?>" class="btn btn-default btn-login-select" style="display:block;">Login with email/password</a>
                 </div>
             </div>
+        </div>
+        <div class="login" style="margin-top: 10px;">
+            <a href="<?= confirm_slash(base_url()); ?>">Return to index</a>
         </div>
     </body>
 </html>

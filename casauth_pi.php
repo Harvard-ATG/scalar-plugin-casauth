@@ -189,9 +189,9 @@ class Casauth {
             } else {
                 show_error("Access denied. You are not authorized to access this site.", 403);
             }
-        } catch(CasauthException $e) {
+        } catch(Casauth_Exception $e) {
             error_log($e->getMessage());
-            show_error($e->getMessage());
+            show_error("Login failed. Error: ".$e->getMessage());
         }
     }
 
@@ -218,7 +218,7 @@ class Casauth {
         $this->model->save_user($attributes);
         $casuser = $this->model->find_by_cas_id($attributes[Casauth_model::$cas_id_attribute]);
         if(!$casuser) {
-            throw new CasauthException("Error retrieving CAS login information");
+            throw new Casauth_Exception("Error retrieving CAS login information");
         }
         $this->model->update_last_login($casuser['cas_id']);
 
@@ -282,7 +282,7 @@ class Casauth {
         // For debugging/testing only with local mock cas server (https://github.com/veo-labs/cas-server-mock)
         // Using this to explicitly set HTTP URLs
         // See also https://github.com/apereo/phpCAS/issues/27
-        $cas_server = "140.247.36.150:3004";
+        $cas_server = "10.0.0.186:3004";
         $service = confirm_slash(base_url())."system/cas_login";
         phpCAS::setServerLoginURL("http://$cas_server/login?service=".urlencode($service));
         phpCAS::setServerServiceValidateURL("http://$cas_server/serviceValidate");

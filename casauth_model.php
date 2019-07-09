@@ -117,7 +117,7 @@ class Casauth_model extends CI_Model {
         $has_attributes = empty($missing_attributes);
         if(!$has_attributes) {
             $errmsg = "Missing required CAS attributes: ".implode(",", $missing_attributes);
-            throw new CasauthException($errmsg);
+            throw new Casauth_Exception($errmsg);
         }
     }
 
