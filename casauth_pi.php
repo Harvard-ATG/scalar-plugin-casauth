@@ -284,7 +284,7 @@ class Casauth {
         // Using this to explicitly set HTTP URLs
         // See also https://github.com/apereo/phpCAS/issues/27
         if($this->config['cas_debug']) {
-            $cas_server = "10.0.0.186:3004";
+            $cas_server = $this->config['cas_debug_server'];
             $service = confirm_slash(base_url())."system/cas_login";
             phpCAS::setServerLoginURL("http://$cas_server/login?service=".urlencode($service));
             phpCAS::setServerServiceValidateURL("http://$cas_server/serviceValidate");
