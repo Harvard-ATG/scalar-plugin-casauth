@@ -11,7 +11,7 @@ This plugin allows users to authenticate using CAS in addition to the existing e
 1. Scalar must be installed and configured.
 1. Scalar must be registered with the CAS server.
 2. The CAS server must supply the following attributes:
-    - `eduPersonPrincipleName`: uniquely identifies the user
+    - `eduPersonPrincipalName`: uniquely identifies the user
     - `mail`: email address required to register a Scalar account (or link to pre-existing account)
     - `displayName`: full name required to register a Scalar account
 
