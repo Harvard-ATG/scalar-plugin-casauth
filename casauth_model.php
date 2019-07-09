@@ -6,7 +6,7 @@ class Casauth_model extends CI_Model {
     /**
      * @var string The Scalar table name that holds CAS user data.
      */
-    protected $table_name = 'scalar_db_casauth';
+    protected $table_name = 'scalar_plugin_casauth';
 
     /**
      * @var string Defines the attribute to use to identify the CAS user.
