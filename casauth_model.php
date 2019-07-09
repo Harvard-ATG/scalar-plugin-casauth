@@ -63,6 +63,7 @@ class Casauth_model extends CI_Model {
      * @throws Casauth_Exception
      */
     public function save_user($attributes) {
+        error_log("Saving user: ".var_export($attributes,1));
         $this->check_attributes($attributes);
         $casuser = $this->find_by_cas_id($attributes[self::$cas_id_attribute]);
         if(!$casuser) {
@@ -99,6 +100,7 @@ class Casauth_model extends CI_Model {
             'fullname' => $fullname,
             'created' => $now,
         );
+        error_log("Inserting user: ".var_export($data,1));
         $this->db->insert($this->table_name, $data);
 
         return $data;
@@ -128,6 +130,7 @@ class Casauth_model extends CI_Model {
      * @param $scalar_user_id
      */
     public function link_to_scalar_user($cas_id, $scalar_user_id) {
+        error_log("Linking $cas_id to scalar user $scalar_user_id");
         $this->db->where('cas_id', $cas_id);
         $this->db->update($this->table_name, array('user_id' => $scalar_user_id));
     }
