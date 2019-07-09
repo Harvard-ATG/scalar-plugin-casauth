@@ -1,17 +1,27 @@
 # Scalar CAS Authentication 
 
-A plugin for [anvc/scalar](https://github.com/anvc/scalar). This plugin allows users to authenticate using CAS in addition to the existing email/password authentication.
+A plugin for [anvc/scalar](https://github.com/anvc/scalar). 
+
+This plugin allows users to authenticate using CAS in addition to the existing email/password authentication.
 
 ![Login Screen](login_select.png)
+
+## Requirements
+
+1. Scalar must be registered with the CAS server (out of scope).
+2. The CAS server must supply the following attributes:
+    - `eduPersonPrincipleName`: uniquely identifies the user
+    - `mail`: email address required to register a Scalar account (or link to pre-existing account)
+    - `displayName`: full name required to register a Scalar account
 
 ## Quickstart
 
 1. Download and unzip to `system/application/plugins/casauth`. 
 2. Rename `config.ini.sample` to `config.ini` and update the CAS settings to point to your CAS server.
-3. Run the SQL in `plugin.sql` against the database to setup the required tables.
-4. Register the plugin in `system/application/config/plugins.php`. To register, add or update this line:
+3. Create database table(s) for this plugin by running the SQL in `plugin.sql` against your Scalar database.
+4. Activate the plugin in `system/application/config/plugins.php`:
     ```
     $config['plugins']['auth'] = 'casauth';
     ```
-5. Visit http://localhost:8080/system/login and you should see an option to login with the CAS server or with an email and password.
+5. Visit http://localhost:8080/system/login
 
