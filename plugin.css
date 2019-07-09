@@ -1,15 +1,26 @@
+.login {
+    width: 25%;
+    min-width: 400px;
+    margin: 0 auto;
+    font-size: 14px;
+}
 .btn-login-select {
-    display: block;
+    display: inline-block;
     text-align: center;
     width: 100%;
+    padding: .9em;
     font-size: 18px !important;
 }
 .btn-login-cas {
-    padding: 15px;
-    background: #A41034;
-    color: #fff;
+    padding: 1.5em;
+    background: #d5eaf6;
+    border: 4px solid #57acdb;
+    border-radius: 6px;
+    color: #000;
 }
 .btn-login-cas:hover {
-    background: #A41034;
-    color: #000;
+    background: #57acdb;
+    border-color: #57acdb;
+    color: #fff;
+    /*transition: all 0.4s ease 0s;*/
 }
