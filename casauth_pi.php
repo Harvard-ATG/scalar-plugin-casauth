@@ -9,7 +9,7 @@ require_once dirname(__FILE__).'/casauth_exception.php';
  *
  * Scalar Plugin that implements CAS authentication.
  */
-class Casauth {
+class Casauth_pi {
 
     /**
      * @var string The machine-readable name of the plugin. Used to construct file paths.
@@ -35,6 +35,16 @@ class Casauth {
      * @var object Holds CI_Model instance
      */
     public $model = null;
+
+    /**#@+
+     * @var string Login pages
+     */
+    const LOGIN_SELECT = "select";
+    const LOGIN_CAS_REGISTER = "casregister";
+    const LOGIN_CAS = "cas";
+    const LOGIN_DEFAULT = "default";
+    /**#@-*/
+
 
     /**
      * Casauth constructor.
@@ -92,13 +102,16 @@ class Casauth {
         }
 
         switch($login_type) {
-            case 'select':
+            case self::LOGIN_SELECT:
                 $this->select_login();
                 break;
-            case 'cas':
+            case self::LOGIN_CAS_REGISTER:
+                $this->cas_registration_key();
+                break;
+            case self::LOGIN_CAS:
                 $this->cas_login();
                 break;
-            case 'default':
+            case self::LOGIN_DEFAULT:
             default:
                 $this->ci->login();
                 break;
@@ -140,10 +153,45 @@ class Casauth {
      */
     public function select_login() {
         $redirect_url = isset($_GET['redirect_url']) ? $_GET['redirect_url'] : '';
-        $default_login_url = confirm_slash(base_url())."system/login?type=default&redirect_url=" . urlencode($redirect_url);
-        $cas_login_url = confirm_slash(base_url())."system/login?type=cas&redirect_url=" . urlencode($redirect_url);
+        $default_login_url = confirm_slash(base_url())."system/login?type=".self::LOGIN_DEFAULT."&redirect_url=" . urlencode($redirect_url);
+        $cas_login_url = confirm_slash(base_url())."system/login?type=".self::LOGIN_CAS;
         $cas_button_text = $this->config['cas_button_text'];
         include(dirname(__FILE__).'/login_select.php');
+    }
+
+    /**
+     * Prompt for registration key before authenticating with CAS.
+     *
+     * This should display an HTML page that prompts for a registration key,
+     * which is the same key that would be required to signup with an email/password.
+     */
+    public function cas_registration_key() {
+        $register_keys = $this->ci->config->item('register_key');
+        $action_url = $_SERVER['REQUEST_URI'];
+
+        switch($_SERVER['REQUEST_METHOD']) {
+            case 'GET':
+                include(dirname(__FILE__) . '/registration_key.php');
+                exit;
+            case 'POST':
+                $registration_key = $_POST['registration_key'];
+                $is_allowed = empty($register_keys) || in_array($registration_key, $register_keys);
+                if($is_allowed) {
+                    $session_data = array("{$this->plugin_name}_registration_key" => $registration_key);
+                    $this->ci->session->set_userdata($session_data);
+                    $this->redirect(self::LOGIN_CAS);
+                    exit;
+                } else {
+                    $has_error = true;
+                    $error_msg = "Invalid registration key: $registration_key";
+                    include(dirname(__FILE__) . '/registration_key.php');
+                    exit;
+                }
+                break;
+            default:
+                throw new Casauth_Exception("Invalid request method: ".$_SERVER['REQUEST_METHOD']);
+                break;
+        }
     }
 
     /**
@@ -176,8 +224,7 @@ class Casauth {
             show_error($e->getMessage());
         }
 
-        // If we get here, the user has been authenticated with the CAS server,
-        // and we can proceed to log them in to Scalar.
+        // Authenticate user with Scalar account system.
         try {
             list($auth_success, $user_id) = $this->authenticate();
             if($auth_success) {
@@ -215,7 +262,23 @@ class Casauth {
         $attributes = phpCas::getAttributes();
         error_log("phpCas attributes:".var_export($attributes,1));
 
-        // Ensure the CAS user has been added to the database.
+        // For new users, check if a registration key is required
+        $casuser = $this->model->find_by_cas_id($attributes[Casauth_model::$cas_id_attribute]);
+        if(!$casuser) {
+            $register_keys = $this->ci->config->item('register_key');
+            if(!empty($register_keys)) {
+                $registration_key = $this->ci->session->userdata("{$this->plugin_name}_registration_key");
+                if($registration_key) {
+                    if(!in_array($registration_key, $register_keys)) {
+                        show_error("Login failed. Invalid registration key: $registration_key");
+                    }
+                } else {
+                    $this->redirect(self::LOGIN_CAS_REGISTER);
+                }
+            }
+        }
+
+        // Add CAS User to the database
         $this->model->save_user($attributes);
         $casuser = $this->model->find_by_cas_id($attributes[Casauth_model::$cas_id_attribute]);
         if(!$casuser) {
@@ -239,7 +302,7 @@ class Casauth {
                 $this->model->link_to_scalar_user($casuser['cas_id'], $existing_scalaruser->user_id);
                 return array(true, $existing_scalaruser->user_id);
             }
-            $registered_scalaruser = $this->register($casuser);
+            $registered_scalaruser = $this->register_scalar_account($casuser);
             return array(true, $registered_scalaruser->user_id);
         }
 
@@ -255,7 +318,7 @@ class Casauth {
      * @param $casuser
      * @return mixed Returns false if the user is not found, otherwise an array.
      */
-    public function register($casuser) {
+    public function register_scalar_account($casuser) {
         $data = array(
             'email' => $casuser['email'],
             'fullname' => $casuser['fullname'],
@@ -276,6 +339,14 @@ class Casauth {
         $this->ci->session->set_userdata(array($login_basename => (array) $scalaruser));
         header("Location: ".$login_basename, TRUE);
         exit();
+    }
+
+    /**
+     * Redirects to a plugin-provided URL.
+     */
+    public function redirect($login_type) {
+        header('Location: '.confirm_slash(base_url())."system/login?type=$login_type");
+        exit;
     }
 
     // For debugging locally.

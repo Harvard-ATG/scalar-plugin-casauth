@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `scalar_db_casauth` (
+CREATE TABLE IF NOT EXISTS `scalar_db_plugin_casauth` (
   `cas_id` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
   `email` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
   `fullname` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
