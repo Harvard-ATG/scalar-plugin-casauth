@@ -11,7 +11,7 @@ class Casauth_model extends CI_Model {
     /**
      * @var string Defines the attribute to use to identify the CAS user.
      */
-    public static $cas_id_attribute = 'eduPersonPrincipleName'; // A unique but opaque identifier for a user; generally of the form user@domain
+    public static $cas_id_attribute = 'eduPersonPrincipalName'; // A unique but opaque identifier for a user; generally of the form user@domain
 
     /**
      * @var string Defines the attribute for the CAS user's email address.

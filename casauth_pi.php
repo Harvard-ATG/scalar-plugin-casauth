@@ -70,6 +70,7 @@ class Casauth {
         phpCAS::setDebug();
         phpCAS::setVerbose(true);
         phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
+        phpCAS::setNoCasServerValidation();
     }
 
     /**
@@ -168,7 +169,7 @@ class Casauth {
         // See also: https://apereo.github.io/cas/5.1.x/protocol/CAS-Protocol-Specification.html
         try {
             $this->init_phpCAS();
-            $this->_debug_phpCAS();
+            $this->debug_phpCAS();
             phpCAS::forceAuthentication();
         } catch(CAS_Exception $e) {
             error_log($e->getMessage());
@@ -278,15 +279,16 @@ class Casauth {
     }
 
     // For debugging locally.
-    private function _debug_phpCAS() {
+    private function debug_phpCAS() {
         // For debugging/testing only with local mock cas server (https://github.com/veo-labs/cas-server-mock)
         // Using this to explicitly set HTTP URLs
         // See also https://github.com/apereo/phpCAS/issues/27
-        $cas_server = "10.0.0.186:3004";
-        $service = confirm_slash(base_url())."system/cas_login";
-        phpCAS::setServerLoginURL("http://$cas_server/login?service=".urlencode($service));
-        phpCAS::setServerServiceValidateURL("http://$cas_server/serviceValidate");
-        phpCAS::setNoCasServerValidation();
+        if($this->config['cas_debug']) {
+            $cas_server = "10.0.0.186:3004";
+            $service = confirm_slash(base_url())."system/cas_login";
+            phpCAS::setServerLoginURL("http://$cas_server/login?service=".urlencode($service));
+            phpCAS::setServerServiceValidateURL("http://$cas_server/serviceValidate");
+        }
     }
 
 }
