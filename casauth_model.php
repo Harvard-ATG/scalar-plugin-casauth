@@ -6,7 +6,12 @@ class Casauth_model extends CI_Model {
     /**
      * @var string The Scalar table name that holds CAS user data.
      */
-    protected $table_name = 'scalar_plugin_casauth';
+    protected $table_name = 'plugin_casauth';
+
+    /**
+     * @var boolean Set to true to enable debugging
+     */
+    protected $debug = false;
 
     /**
      * @var string Defines the attribute to use to identify the CAS user.
@@ -54,6 +59,7 @@ class Casauth_model extends CI_Model {
         );
 
         $this->load->database();
+        $this->db->db_debug = $this->db->db_debug || $this->debug;
     }
 
     /**
