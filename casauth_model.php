@@ -60,6 +60,7 @@ class Casauth_model extends CI_Model {
 
         $this->load->database();
         $this->db->db_debug = $this->db->db_debug || $this->debug;
+        $this->table_name = $this->db->dbprefix.$this->table_name; // e.g. prefix table name with "scalar_db_"
     }
 
     /**
