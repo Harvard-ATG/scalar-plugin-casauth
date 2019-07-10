@@ -135,7 +135,7 @@ class Casauth {
     public function action_login_select() {
         $redirect_url = isset($_GET['redirect_url']) ? $_GET['redirect_url'] : '';
         $default_login_url = confirm_slash(base_url())."system/login?state=".self::LOGIN_STATE_DEFAULT."&redirect_url=" . urlencode($redirect_url);
-        $cas_login_url = confirm_slash(base_url())."system/login?state=".self::LOGIN_STATE_CAS;
+        $cas_login_url = confirm_slash(base_url())."system/login?state=".self::LOGIN_STATE_CAS."&redirect_url=" . urlencode($redirect_url);
         $cas_button_text = $this->config['cas_button_text'];
         include(dirname(__FILE__).'/login_select.php');
     }
@@ -194,6 +194,12 @@ class Casauth {
      * be registered automatically, and the user will be logged in.
      */
     public function action_login_cas() {
+        // Save redirect URL if one is present
+        if(isset($_GET['redirect_url'])) {
+            $session_data = array("{$this->plugin_name}_redirect_url" => $_GET['redirect_url']);
+            $this->ci->session->set_userdata($session_data);
+        }
+
         // Handle CAS authentication flow
         // See also: https://apereo.github.io/cas/5.1.x/protocol/CAS-Protocol-Specification.html
         try {
@@ -347,10 +353,18 @@ class Casauth {
      */
     protected function _login($scalaruser) {
         $login_basename = confirm_slash(base_url());
+
         $scalaruser->is_logged_in = true;
         $this->ci->session->set_userdata(array($login_basename => (array) $scalaruser));
-        header("Location: ".$login_basename, TRUE);
-        exit();
+
+        $redirect_url = $this->ci->session->userdata("{$this->plugin_name}_redirect_url");
+        if($redirect_url) {
+            $this->ci->session->unset_userdata("{$this->plugin_name}_redirect_url");
+            header("Location: ".$redirect_url, TRUE);
+        } else {
+            header("Location: ".$login_basename, TRUE);
+        }
+        exit;
     }
 
     /**
