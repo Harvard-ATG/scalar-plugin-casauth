@@ -37,12 +37,12 @@ class Casauth_pi {
     public $model = null;
 
     /**#@+
-     * @var string Login pages
+     * @var string Login states.
      */
-    const LOGIN_SELECT = "select";
-    const LOGIN_CAS_REGISTER = "casregister";
-    const LOGIN_CAS = "cas";
-    const LOGIN_DEFAULT = "default";
+    const LOGIN_STATE_SELECT = "select";
+    const LOGIN_STATE_CAS = "cas";
+    const LOGIN_STATE_REGKEY = "regkey";
+    const LOGIN_STATE_DEFAULT = "default";
     /**#@-*/
 
 
@@ -74,9 +74,9 @@ class Casauth_pi {
     }
 
     /**
-     * Initializes the phpCas client.
+     * Setup the phpCas client.
      */
-    public function init_phpCAS() {
+    public function phpCAS() {
         phpCAS::setDebug();
         phpCAS::setVerbose(true);
         phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
@@ -95,23 +95,27 @@ class Casauth_pi {
      * This is intended to override the system::login() method.
      */
     public function hook_system_login() {
-        if(isset($_GET['type'])) {
-            $login_type = $_GET['type'];
-        } else {
-            $login_type = 'select';
+        switch($_SERVER['REQUEST_METHOD']) {
+            case 'GET':
+                $login_type = isset($_GET['state']) ? $_GET['state'] : self::LOGIN_STATE_SELECT;
+                break;
+            case 'POST':
+            default:
+                $login_type = self::LOGIN_STATE_DEFAULT;
+                break;
         }
 
         switch($login_type) {
-            case self::LOGIN_SELECT:
-                $this->select_login();
+            case self::LOGIN_STATE_SELECT:
+                $this->action_login_select();
                 break;
-            case self::LOGIN_CAS_REGISTER:
-                $this->cas_registration_key();
+            case self::LOGIN_STATE_CAS:
+                $this->action_login_cas();
                 break;
-            case self::LOGIN_CAS:
-                $this->cas_login();
+            case self::LOGIN_STATE_REGKEY:
+                $this->action_login_regkey();
                 break;
-            case self::LOGIN_DEFAULT:
+            case self::LOGIN_STATE_DEFAULT:
             default:
                 $this->ci->login();
                 break;
@@ -127,7 +131,7 @@ class Casauth_pi {
      *       We need to find a way to resolve this so that we can logout from CAS too.
      */
     public function hook_system_logout() {
-        $this->init_phpCAS();
+        $this->phpCAS();
         phpCas::logout();
         $this->ci->logout();
     }
@@ -138,7 +142,7 @@ class Casauth_pi {
      * to call back to with the service ticket.
      */
     public function hook_system_cas_login() {
-        $this->cas_login();
+        $this->action_login_cas();
     }
 
     /**
@@ -151,10 +155,10 @@ class Casauth_pi {
      *
      * Clicking on the link should direct the user to the appropriate login page.
      */
-    public function select_login() {
+    public function action_login_select() {
         $redirect_url = isset($_GET['redirect_url']) ? $_GET['redirect_url'] : '';
-        $default_login_url = confirm_slash(base_url())."system/login?type=".self::LOGIN_DEFAULT."&redirect_url=" . urlencode($redirect_url);
-        $cas_login_url = confirm_slash(base_url())."system/login?type=".self::LOGIN_CAS;
+        $default_login_url = confirm_slash(base_url())."system/login?state=".self::LOGIN_STATE_DEFAULT."&redirect_url=" . urlencode($redirect_url);
+        $cas_login_url = confirm_slash(base_url())."system/login?state=".self::LOGIN_STATE_CAS;
         $cas_button_text = $this->config['cas_button_text'];
         include(dirname(__FILE__).'/login_select.php');
     }
@@ -165,7 +169,7 @@ class Casauth_pi {
      * This should display an HTML page that prompts for a registration key,
      * which is the same key that would be required to signup with an email/password.
      */
-    public function cas_registration_key() {
+    public function action_login_regkey() {
         $register_keys = $this->ci->config->item('register_key');
         $action_url = $_SERVER['REQUEST_URI'];
 
@@ -179,7 +183,7 @@ class Casauth_pi {
                 if($is_allowed) {
                     $session_data = array("{$this->plugin_name}_registration_key" => $registration_key);
                     $this->ci->session->set_userdata($session_data);
-                    $this->redirect(self::LOGIN_CAS);
+                    $this->_redirect(self::LOGIN_STATE_CAS);
                     exit;
                 } else {
                     $has_error = true;
@@ -212,11 +216,11 @@ class Casauth_pi {
      * If it's not possible to link to an existing account, then a new account will
      * be registered automatically, and the user will be logged in.
      */
-    public function cas_login() {
+    public function action_login_cas() {
         // Handle CAS authentication flow
         // See also: https://apereo.github.io/cas/5.1.x/protocol/CAS-Protocol-Specification.html
         try {
-            $this->init_phpCAS();
+            $this->phpCAS();
             $this->debug_phpCAS();
             phpCAS::forceAuthentication();
         } catch(CAS_Exception $e) {
@@ -230,7 +234,7 @@ class Casauth_pi {
             if($auth_success) {
                 $scalaruser = $this->ci->users->get_by_user_id($user_id);
                 if($scalaruser) {
-                    $this->login_and_redirect($scalaruser);
+                    $this->_login($scalaruser);
                 } else {
                     show_404("Login failed. Scalar user $user_id not found!");
                 }
@@ -254,37 +258,32 @@ class Casauth_pi {
      *
      * Note that this DOES NOT perform the actual login (e.g update the session).
      *
-     * @return array Returns a 2-element array with a boolean to indicate a successful authentication,
+     * @return array Returns a 2-element array with a boolean (success/failure),
      *               and the Scalar user_id if authentication was successful.
      */
     public function authenticate() {
         // Retrieve the attributes
         $attributes = phpCas::getAttributes();
-        error_log("phpCas attributes:".var_export($attributes,1));
+        $cas_id = $attributes[Casauth_model::$cas_id_attribute];
+        error_log("authenticate(): cas_id: $cas_id attributes:".var_export($attributes,1));
 
         // For new users, check if a registration key is required
-        $casuser = $this->model->find_by_cas_id($attributes[Casauth_model::$cas_id_attribute]);
-        if(!$casuser) {
-            $register_keys = $this->ci->config->item('register_key');
-            if(!empty($register_keys)) {
-                $registration_key = $this->ci->session->userdata("{$this->plugin_name}_registration_key");
-                if($registration_key) {
-                    if(!in_array($registration_key, $register_keys)) {
-                        show_error("Login failed. Invalid registration key: $registration_key");
-                    }
-                } else {
-                    $this->redirect(self::LOGIN_CAS_REGISTER);
-                }
+        list($regkey_success, $registration_key) = $this->_authenticate_regkey();
+        if(!$regkey_success) {
+            if($registration_key === NULL) {
+                $this->_redirect(self::LOGIN_STATE_REGKEY);
+            } else {
+                throw new Casauth_Exception("Login failed. Invalid registration key: $registration_key");
             }
         }
 
         // Add CAS User to the database
         $this->model->save_user($attributes);
-        $casuser = $this->model->find_by_cas_id($attributes[Casauth_model::$cas_id_attribute]);
+        $casuser = $this->model->find_by_cas_id($cas_id);
         if(!$casuser) {
-            throw new Casauth_Exception("Error retrieving CAS login information");
+            throw new Casauth_Exception("Error retrieving CAS user from database");
         }
-        $this->model->update_last_login($casuser['cas_id']);
+        $this->model->update_last_login($cas_id);
 
         // Check if the CAS User is active and therefore allowed to proceed.
         // By default, new users are active.
@@ -299,15 +298,45 @@ class Casauth_pi {
         if(!$casuser['user_id']) {
             $existing_scalaruser = $this->ci->users->get_by_email($casuser['email']);
             if($existing_scalaruser) {
-                $this->model->link_to_scalar_user($casuser['cas_id'], $existing_scalaruser->user_id);
+                $this->model->link_to_scalar_user($cas_id, $existing_scalaruser->user_id);
                 return array(true, $existing_scalaruser->user_id);
             }
-            $registered_scalaruser = $this->register_scalar_account($casuser);
+            $registered_scalaruser = $this->_register_account($casuser);
             return array(true, $registered_scalaruser->user_id);
         }
 
         // If we get here, the user has logged in before so we simply return the linked Scalar account.
         return array(true, $casuser['user_id']);
+    }
+
+    /**
+     * Checks the registration key for new users.
+     *
+     * @param array Returns a 2-element array with a boolean (success/failure),
+     *              and a message. On failure, returns the invalid registration key or null
+     *              if none was provided.
+     */
+    protected function _authenticate_regkey($cas_id) {
+        $casuser = $this->model->find_by_cas_id($cas_id);
+        if($casuser) {
+            return array(true, "User already registered; registration key not required");
+        }
+
+        $register_keys = $this->ci->config->item('register_key');
+        if(empty($register_keys)) {
+            return array(true, "Registration keys not configured");
+        }
+        
+        $registration_key = $this->ci->session->userdata("{$this->plugin_name}_registration_key");
+        if($registration_key) {
+            if(!in_array($registration_key, $register_keys)) {
+                return array(false, $registration_key);
+            }
+        } else {
+            return array(false, null);
+        }
+        
+        return array(true, $registration_key);
     }
 
     /**
@@ -318,7 +347,7 @@ class Casauth_pi {
      * @param $casuser
      * @return mixed Returns false if the user is not found, otherwise an array.
      */
-    public function register_scalar_account($casuser) {
+    protected function _register_account($casuser) {
         $data = array(
             'email' => $casuser['email'],
             'fullname' => $casuser['fullname'],
@@ -333,7 +362,7 @@ class Casauth_pi {
      *
      * @param $scalaruser
      */
-    public function login_and_redirect($scalaruser) {
+    protected function _login($scalaruser) {
         $login_basename = confirm_slash(base_url());
         $scalaruser->is_logged_in = true;
         $this->ci->session->set_userdata(array($login_basename => (array) $scalaruser));
@@ -344,8 +373,8 @@ class Casauth_pi {
     /**
      * Redirects to a plugin-provided URL.
      */
-    public function redirect($login_type) {
-        header('Location: '.confirm_slash(base_url())."system/login?type=$login_type");
+    protected function _redirect($login_state) {
+        header('Location: '.confirm_slash(base_url())."system/login?state=$login_state");
         exit;
     }
 
