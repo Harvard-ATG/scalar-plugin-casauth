@@ -14,7 +14,7 @@ class Casauth_pi {
     /**
      * @var string The machine-readable name of the plugin. Used to construct file paths.
      */
-    public $plugin_name = "";
+    public $plugin_name = "casauth";
 
     /**
      * @var string The filesystem path to the plugin.
@@ -54,7 +54,6 @@ class Casauth_pi {
      * @throws Exception
      */
     public function __construct() {
-        $this->plugin_name = strtolower(get_class($this));
         $this->plugin_path = "system/application/plugins/{$this->plugin_name}";
 
         $this->config = parse_ini_file(dirname(__FILE__).'/config.ini');
