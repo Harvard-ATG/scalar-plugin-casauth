@@ -219,7 +219,7 @@ class Casauth_pi {
             show_error($e->getMessage());
         }
 
-        // Authorize user with Scalar (check registration key)
+        // PreAuthorize user with Scalar (check registration key)
         list($preauthorized, $registration_key) = $this->preauthorize();
         if(!$preauthorized) {
             if($registration_key === NULL) {
@@ -318,6 +318,7 @@ class Casauth_pi {
 
         // Deny CAS User if they are considered inactive
         if(!$casuser['is_active']) {
+            error_log("authenticate(): cas_id: $cas_id denied because inactive");
             return array(false, -1);
         }
 
