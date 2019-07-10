@@ -392,7 +392,7 @@ class Casauth_pi {
         // For debugging/testing only with local mock cas server (https://github.com/veo-labs/cas-server-mock)
         // Using this to explicitly set HTTP URLs
         // See also https://github.com/apereo/phpCAS/issues/27
-        if($this->config['cas_debug']) {
+        if(isset($this->config['cas_debug'])) {
             $cas_server = $this->config['cas_debug_server'];
             $service = confirm_slash(base_url())."system/cas_login";
             phpCAS::setServerLoginURL("http://$cas_server/login?service=".urlencode($service));
