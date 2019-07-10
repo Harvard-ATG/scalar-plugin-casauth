@@ -114,20 +114,6 @@ class Casauth_pi {
     }
 
     /**
-     * Called by system controller's _remap() method.
-     * This is intended to override the system::logout() method.
-     *
-     * TODO: Logout is never called because scalar's MY_Controller does it in __construct()
-     *       and then immediately redirects, so the controller logout() method is never actually called.
-     *       We need to find a way to resolve this so that we can logout from CAS too.
-     */
-    public function hook_system_logout() {
-        $this->phpCAS();
-        phpCas::logout();
-        $this->ci->logout();
-    }
-
-    /**
      * Called by the system controller's _remap() method.
      * This is intended to provide a separate endpoint for the CAS server
      * to call back to with the service ticket.
@@ -212,7 +198,6 @@ class Casauth_pi {
         // See also: https://apereo.github.io/cas/5.1.x/protocol/CAS-Protocol-Specification.html
         try {
             $this->_phpCAS_init();
-            $this->_phpCAS_debug();
             phpCAS::forceAuthentication();
         } catch(CAS_Exception $e) {
             error_log($e->getMessage());
@@ -384,16 +369,10 @@ class Casauth_pi {
         phpCAS::setVerbose(true);
         phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
         phpCAS::setNoCasServerValidation(); // TODO: Fix this for production
-    }
 
-    /**
-     * Set debugging URLs for phpCAS (local development)
-     */
-    protected function _phpCAS_debug() {
-        // For debugging/testing only with local mock cas server (https://github.com/veo-labs/cas-server-mock)
-        // Using this to explicitly set HTTP URLs
-        // See also https://github.com/apereo/phpCAS/issues/27
         if(isset($this->config['cas_debug'])) {
+            // For debugging/testingwith local mock cas server (https://github.com/veo-labs/cas-server-mock)
+            // Using this to explicitly set HTTP URLs. See also https://github.com/apereo/phpCAS/issues/27
             $cas_server = $this->config['cas_debug_server'];
             $service = confirm_slash(base_url())."system/cas_login";
             phpCAS::setServerLoginURL("http://$cas_server/login?service=".urlencode($service));
