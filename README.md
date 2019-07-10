@@ -2,7 +2,7 @@
 
 A plugin for [anvc/scalar](https://github.com/anvc/scalar). 
 
-This plugin allows users to authenticate using CAS in addition to the existing email/password authentication.
+This plugin allows users to authenticate using CAS in addition to the existing email/password authentication. If registration keys are configured in `local_settings.php`, the user will be prompted the first time they attempt to login with CAS.
 
 ![Login Selection](docs/login_select.png)
 
