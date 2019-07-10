@@ -8,6 +8,8 @@ require_once dirname(__FILE__).'/casauth_exception.php';
  * Class Casauth
  *
  * Scalar Plugin that implements CAS authentication.
+ *
+ * @author Arthur Barrett <abarrett@fas.harvard.edu>
  */
 class Casauth_pi {
 
@@ -73,16 +75,6 @@ class Casauth_pi {
     }
 
     /**
-     * Setup the phpCas client.
-     */
-    public function phpCAS() {
-        phpCAS::setDebug();
-        phpCAS::setVerbose(true);
-        phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
-        phpCAS::setNoCasServerValidation(); // TODO: Fix this for production
-    }
-
-    /**
      * Get an instance of the model.
      */
     public function get_model() {
@@ -100,7 +92,7 @@ class Casauth_pi {
                 break;
             case 'POST':
             default:
-                $login_type = self::LOGIN_STATE_DEFAULT;
+                $login_type = isset($_GET['state']) ? $_GET['state'] : self::LOGIN_STATE_DEFAULT;
                 break;
         }
 
@@ -219,15 +211,25 @@ class Casauth_pi {
         // Handle CAS authentication flow
         // See also: https://apereo.github.io/cas/5.1.x/protocol/CAS-Protocol-Specification.html
         try {
-            $this->phpCAS();
-            $this->debug_phpCAS();
+            $this->_phpCAS_init();
+            $this->_phpCAS_debug();
             phpCAS::forceAuthentication();
         } catch(CAS_Exception $e) {
             error_log($e->getMessage());
             show_error($e->getMessage());
         }
 
-        // Authenticate user with Scalar account system.
+        // Authorize user with Scalar (check registration key)
+        list($authorized, $registration_key) = $this->authorize();
+        if(!$authorized) {
+            if($registration_key === NULL) {
+                $this->_redirect(self::LOGIN_STATE_REGKEY);
+            } else {
+                show_error("Access denied. Registration key [$registration_key] is not valid.", 403);
+            }
+        }
+
+        // Authenticate user with Scalar (create/link to account)
         try {
             list($auth_success, $user_id) = $this->authenticate();
             if($auth_success) {
@@ -252,31 +254,19 @@ class Casauth_pi {
      * Given a successful CAS authentication, when attributes are provided (e.g. name, email),
      * then those attributes can be used to authenticate the user in Scalar.
      *
-     * The email will be used to link to an existing Scalar user account on the first login,
-     * otherwise a new account will be created.
+     * The email provided by CAS will be used to link to an existing Scalar account on the first
+     * login, otherwise a new Scalar account will be created automatically.
      *
      * Note that this DOES NOT perform the actual login (e.g update the session).
      *
-     * @return array Returns a 2-element array with a boolean (success/failure),
-     *               and the Scalar user_id if authentication was successful.
+     * @return array Returns a 2-element array: (boolean, string)
      */
     public function authenticate() {
-        // Retrieve the attributes
         $attributes = phpCas::getAttributes();
         $cas_id = $attributes[Casauth_model::$cas_id_attribute];
         error_log("authenticate(): cas_id: $cas_id attributes:".var_export($attributes,1));
 
-        // For new users, check if a registration key is required
-        list($regkey_success, $registration_key) = $this->_authenticate_regkey();
-        if(!$regkey_success) {
-            if($registration_key === NULL) {
-                $this->_redirect(self::LOGIN_STATE_REGKEY);
-            } else {
-                throw new Casauth_Exception("Login failed. Invalid registration key: $registration_key");
-            }
-        }
-
-        // Add CAS User to the database
+        // Save CAS User attributes
         $this->model->save_user($attributes);
         $casuser = $this->model->find_by_cas_id($cas_id);
         if(!$casuser) {
@@ -284,16 +274,12 @@ class Casauth_pi {
         }
         $this->model->update_last_login($cas_id);
 
-        // Check if the CAS User is active and therefore allowed to proceed.
-        // By default, new users are active.
+        // Deny CAS User if they are considered inactive
         if(!$casuser['is_active']) {
             return array(false, -1);
         }
 
-        // Check if the CAS User is linked to a Scalar User Account yet.
-        // For a first time CAS login, there are two options on how to proceed:
-        //      Option #1: link to an existing scalar user account by email
-        //      Option #2: register a new scalar user account
+        // Link CAS User to a Scalar account, or create a Scalar account if necessary
         if(!$casuser['user_id']) {
             $existing_scalaruser = $this->ci->users->get_by_email($casuser['email']);
             if($existing_scalaruser) {
@@ -304,18 +290,24 @@ class Casauth_pi {
             return array(true, $registered_scalaruser->user_id);
         }
 
-        // If we get here, the user has logged in before so we simply return the linked Scalar account.
+        // If we get here, user has been successfully authenticated with a Scalar account
         return array(true, $casuser['user_id']);
     }
 
     /**
-     * Checks the registration key for new users.
+     * Authorizes CAS user.
      *
-     * @param array Returns a 2-element array with a boolean (success/failure),
-     *              and a message. On failure, returns the invalid registration key or null
-     *              if none was provided.
+     * If a registration key is required for new users, this method will check that it is valid.
+     *
+     * @return array Returns a 2-element array: (boolean, string)
+     *               When true, returns a success message
+     *               When false, returns either the invalid registration key or null.
      */
-    protected function _authenticate_regkey($cas_id) {
+    public function authorize() {
+        $attributes = phpCas::getAttributes();
+        $cas_id = $attributes[Casauth_model::$cas_id_attribute];
+        error_log("authorize(): cas_id: $cas_id attributes:".var_export($attributes,1));
+
         $casuser = $this->model->find_by_cas_id($cas_id);
         if($casuser) {
             return array(true, "User already registered; registration key not required");
@@ -377,8 +369,20 @@ class Casauth_pi {
         exit;
     }
 
-    // For debugging locally.
-    private function debug_phpCAS() {
+    /**
+     * Initialize the phpCas client.
+     */
+    protected function _phpCAS_init() {
+        phpCAS::setDebug();
+        phpCAS::setVerbose(true);
+        phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
+        phpCAS::setNoCasServerValidation(); // TODO: Fix this for production
+    }
+
+    /**
+     * Set debugging URLs for phpCAS (local development)
+     */
+    protected function _phpCAS_debug() {
         // For debugging/testing only with local mock cas server (https://github.com/veo-labs/cas-server-mock)
         // Using this to explicitly set HTTP URLs
         // See also https://github.com/apereo/phpCAS/issues/27
