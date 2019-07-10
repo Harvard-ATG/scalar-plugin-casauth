@@ -11,7 +11,7 @@ require_once dirname(__FILE__).'/casauth_exception.php';
  *
  * @author Arthur Barrett <abarrett@fas.harvard.edu>
  */
-class Casauth_pi {
+class Casauth {
 
     /**
      * @var string The machine-readable name of the plugin. Used to construct file paths.
