@@ -219,25 +219,25 @@ class Casauth_pi {
             show_error($e->getMessage());
         }
 
-        // PreAuthorize user with Scalar (check registration key)
-        list($preauthorized, $registration_key) = $this->preauthorize();
-        if(!$preauthorized) {
-            if($registration_key === NULL) {
-                $this->_redirect(self::LOGIN_STATE_REGKEY);
-            } else {
-                show_error("Access denied. Registration key [$registration_key] is not valid.", 403);
-            }
-        }
-
-        // Authenticate user with Scalar (create/link to account)
         try {
+            // PreAuthorize user with Scalar (check registration key)
+            list($preauthorized, $registration_key) = $this->preauthorize();
+            if(!$preauthorized) {
+                if($registration_key === NULL) {
+                    $this->_redirect(self::LOGIN_STATE_REGKEY);
+                } else {
+                    show_error("Access denied. Registration key [$registration_key] is not valid.", 403);
+                }
+            }
+
+            // Authenticate user with Scalar (create/link to account)
             list($auth_success, $user_id) = $this->authenticate();
             if($auth_success) {
                 $scalaruser = $this->ci->users->get_by_user_id($user_id);
                 if($scalaruser) {
                     $this->_login($scalaruser);
                 } else {
-                    show_404("Login failed. Scalar user $user_id not found!");
+                    show_404("Scalar user $user_id not found!");
                 }
             } else {
                 show_error("Access denied. You are not authorized to access this site.", 403);
