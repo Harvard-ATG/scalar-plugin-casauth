@@ -4,7 +4,13 @@ A plugin for [anvc/scalar](https://github.com/anvc/scalar).
 
 This plugin allows users to authenticate using CAS in addition to the existing email/password authentication.
 
-![Login Screen](login_select.png)
+![Login Selection](docs/login_select.png)
+_Select login method_
+
+![Login Registration Key](docs/login_regkey.png)
+_If configured, require a registration key after logging in with the CAS server_
+
+
 
 ## Requirements
 

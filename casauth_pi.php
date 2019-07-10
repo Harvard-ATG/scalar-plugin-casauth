@@ -220,8 +220,8 @@ class Casauth_pi {
         }
 
         // Authorize user with Scalar (check registration key)
-        list($authorized, $registration_key) = $this->authorize();
-        if(!$authorized) {
+        list($preauthorized, $registration_key) = $this->preauthorize();
+        if(!$preauthorized) {
             if($registration_key === NULL) {
                 $this->_redirect(self::LOGIN_STATE_REGKEY);
             } else {
@@ -246,6 +246,48 @@ class Casauth_pi {
             error_log($e->getMessage());
             show_error("Login failed. Error: ".$e->getMessage());
         }
+    }
+
+    /**
+     * Pre-Authorizes a CAS user.
+     *
+     * This method is used to check whether or not the user is allowed to register
+     * a new account in Scalar, based on whether or not they posses a "registration key",
+     * which would ordinarily be provided to them by a Scalar administrator.
+     *
+     * This is the same mechanism used by the standard Scalar signup form (email/password),
+     * the only difference is that the registration step can proceed automatically if the
+     * user provides a valid registration key.
+     *
+     * @return array Returns a 2-element array: (boolean, string)
+     *               When true, returns a success message
+     *               When false, returns either the invalid registration key or null.
+     */
+    public function preauthorize() {
+        $attributes = phpCas::getAttributes();
+        $cas_id = $attributes[Casauth_model::$cas_id_attribute];
+        error_log("authorize(): cas_id: $cas_id attributes:".var_export($attributes,1));
+
+        $casuser = $this->model->find_by_cas_id($cas_id);
+        if($casuser) {
+            return array(true, "User already registered; registration key not required");
+        }
+
+        $register_keys = $this->ci->config->item('register_key');
+        if(empty($register_keys)) {
+            return array(true, "Registration keys not configured");
+        }
+
+        $registration_key = $this->ci->session->userdata("{$this->plugin_name}_registration_key");
+        if($registration_key) {
+            if(!in_array($registration_key, $register_keys)) {
+                return array(false, $registration_key);
+            }
+        } else {
+            return array(false, null);
+        }
+
+        return array(true, $registration_key);
     }
 
     /**
@@ -292,42 +334,6 @@ class Casauth_pi {
 
         // If we get here, user has been successfully authenticated with a Scalar account
         return array(true, $casuser['user_id']);
-    }
-
-    /**
-     * Authorizes CAS user.
-     *
-     * If a registration key is required for new users, this method will check that it is valid.
-     *
-     * @return array Returns a 2-element array: (boolean, string)
-     *               When true, returns a success message
-     *               When false, returns either the invalid registration key or null.
-     */
-    public function authorize() {
-        $attributes = phpCas::getAttributes();
-        $cas_id = $attributes[Casauth_model::$cas_id_attribute];
-        error_log("authorize(): cas_id: $cas_id attributes:".var_export($attributes,1));
-
-        $casuser = $this->model->find_by_cas_id($cas_id);
-        if($casuser) {
-            return array(true, "User already registered; registration key not required");
-        }
-
-        $register_keys = $this->ci->config->item('register_key');
-        if(empty($register_keys)) {
-            return array(true, "Registration keys not configured");
-        }
-        
-        $registration_key = $this->ci->session->userdata("{$this->plugin_name}_registration_key");
-        if($registration_key) {
-            if(!in_array($registration_key, $register_keys)) {
-                return array(false, $registration_key);
-            }
-        } else {
-            return array(false, null);
-        }
-        
-        return array(true, $registration_key);
     }
 
     /**
