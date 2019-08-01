@@ -319,9 +319,16 @@ class Casauth {
             if($existing_scalaruser) {
                 $this->model->link_to_scalar_user($cas_id, $existing_scalaruser->user_id);
                 return array(true, $existing_scalaruser->user_id);
+            } else {
+                $registered_scalaruser = $this->_register_account($casuser);
+                if($registered_scalaruser) {
+                    $this->model->link_to_scalar_user($cas_id, $registered_scalaruser->user_id);
+                    return array(true, $registered_scalaruser->user_id);
+                } else {
+                    error_log("authenticate(): failed to register account for cas_id: $cas_id");
+                    return array(false, -1);
+                }
             }
-            $registered_scalaruser = $this->_register_account($casuser);
-            return array(true, $registered_scalaruser->user_id);
         }
 
         // If we get here, user has been successfully authenticated with a Scalar account
