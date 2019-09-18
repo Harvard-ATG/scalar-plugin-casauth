@@ -212,11 +212,13 @@ class Casauth {
 
         try {
             // PreAuthorize user with Scalar (check registration key)
-            list($preauthorized, $registration_key) = $this->preauthorize();
+            list($preauthorized, $preauthorized_result) = $this->preauthorize();
+            error_log("preauthorize(): ".var_export(array($preauthorized, $preauthorized_result),1));
             if(!$preauthorized) {
-                if($registration_key === NULL) {
+                if($preauthorized_result === NULL) {
                     $this->_redirect(self::LOGIN_STATE_REGKEY);
                 } else {
+                    $registration_key = $preauthorized_result;
                     show_error("Access denied. Registration key [$registration_key] is not valid.", 403);
                 }
             }
@@ -242,13 +244,19 @@ class Casauth {
     /**
      * Pre-Authorizes a CAS user.
      *
-     * This method is used to check whether or not the user is allowed to register
-     * a new account in Scalar, based on whether or not they posses a "registration key",
-     * which would ordinarily be provided to them by a Scalar administrator.
+     * This method is used to verify whether or not the user is permitted to register an account. It is expected
+     * to be called after the user has been redirected back to Scalar from the CAS server.
      *
-     * This is the same mechanism used by the standard Scalar signup form (email/password),
-     * the only difference is that the registration step can proceed automatically if the
-     * user provides a valid registration key.
+     * The user is considered verified when any of the following is true:
+     *
+     * 1) The user has previously authenticated via CAS. True if there is a record linking their CAS ID
+     *    (e.g. eduPersonPrincipalName) to a scalar user ID.
+     * 2) An account already exists in Scalar, either because they registered themselves or someone created it for them.
+     *    True if the CAS-supplied email matches a Scalar user account email.
+     * 3) The user supplies the correct registration key, or no registration key is required.
+     *
+     * Note that the registration key mechanism is the same mechanism used by the standard Scalar signup
+     * form (email/password).
      *
      * @return array Returns a 2-element array: (boolean, string)
      *               When true, returns a success message
@@ -257,11 +265,19 @@ class Casauth {
     public function preauthorize() {
         $attributes = phpCas::getAttributes();
         $cas_id = $attributes[Casauth_model::$cas_id_attribute];
-        error_log("authorize(): cas_id: $cas_id attributes:".var_export($attributes,1));
+        $cas_email = $attributes[Casauth_model::$email_attribute];
+        error_log("preauthorize(): cas_id: $cas_id attributes:".var_export($attributes,1));
 
         $casuser = $this->model->find_by_cas_id($cas_id);
         if($casuser) {
             return array(true, "User already registered; registration key not required");
+        }
+
+        if($cas_email) {
+            $scalaruser = $this->ci->users->get_by_email($cas_email);
+            if($scalaruser) {
+                return array(true, "User already registered with email; registration key not required");
+            }
         }
 
         $register_keys = $this->ci->config->item('register_key');
