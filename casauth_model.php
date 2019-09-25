@@ -13,7 +13,7 @@ class Casauth_model extends CI_Model {
     protected $debug = false;
 
     /**#@+
-     * @var string Active record fields.
+     * @var string Active record field.
      */
     public $cas_id   = '';
     public $email = '';

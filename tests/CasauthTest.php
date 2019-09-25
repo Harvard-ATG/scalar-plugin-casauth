@@ -93,7 +93,6 @@ class CasauthTest extends TestCase {
                 'session_register_key' => null,
                 'expected' => array(false, null),
             ),
-
         );
 
         foreach($tests as $test) {

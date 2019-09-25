@@ -1,28 +1,22 @@
 <?php
 
 class Casauth_attributes {
-    /**
-     * @var string Defines the attribute to use to identify the CAS user.
-     */
-    public $cas_id_attribute = 'eduPersonPrincipalName'; // A unique but opaque identifier for a user; generally of the form user@domain
 
-    /**
-     * @var string Defines the attribute for the CAS user's email address.
+    /**#@+
+     * @var string CAS attribute
      */
+    public $id_attribute = 'eduPersonPrincipalName'; // A unique but opaque identifier for a user; generally of the form user@domain
     public $email_attribute = 'mail';
-
-    /**
-     * @var string Defines the attribute for the CAS user's full name.
-     */
     public $fullname_attribute = 'displayName';
+    /**#@-*/
 
     /**
-     * @var array Holds the required attributes for creating a new CAS user record.
+     * @var array Required CAS attributes
      */
     public $required_attributes = array('eduPersonPrincipalName', 'mail', 'displayName');
 
     /**
-     * @var array Holds the actual attributes returned by CAS
+     * @var array Holds attributes returned by CAS
      */
     public $attributes = array();
 
@@ -52,19 +46,19 @@ class Casauth_attributes {
      * @return string
      */
     public function get_cas_id() {
-        if(!isset($this->attributes[$this->cas_id_attribute])) {
+        if(!isset($this->attributes[$this->id_attribute])) {
             return '';
         }
-        return trim($this->attributes[$this->cas_id_attribute]);
+        return trim($this->attributes[$this->id_attribute]);
     }
 
     /**
      * Set the CAS user ID.
      *
-     * @param string
+     * @param string $cas_id
      */
     public function set_cas_id($cas_id) {
-        $this->attributes[$this->cas_id_attribute] = $cas_id;
+        $this->attributes[$this->id_attribute] = $cas_id;
         return $this;
     }
 
@@ -83,7 +77,7 @@ class Casauth_attributes {
     /**
      * Set the CAS user email.
      *
-     * @param string
+     * @param string $cas_email
      */
     public function set_email($cas_email) {
         $this->attributes[$this->email_attribute] = $cas_email;
@@ -105,7 +99,7 @@ class Casauth_attributes {
     /**
      * Set the CAS user full name.
      *
-     * @param string
+     * @param string $fullname
      */
     public function set_fullname($fullname) {
         $this->attributes[$this->fullname_attribute] = $fullname;
@@ -118,7 +112,7 @@ class Casauth_attributes {
      * @throws Casauth_Exception
      */
     public function validate() {
-        $this->check($this->attributes);
+        $this->check($this->required_attributes, $this->attributes);
     }
 
     /**
@@ -128,9 +122,9 @@ class Casauth_attributes {
      * @param $attributes
      * @throws Casauth_Exception
      */
-    public function check($attributes) {
+    public function check($required_attributes, $attributes) {
         $actual_attributes = array_keys($attributes);
-        $missing_attributes = array_diff($this->required_attributes, $actual_attributes);
+        $missing_attributes = array_diff($required_attributes, $actual_attributes);
         $has_attributes = empty($missing_attributes);
         if(!$has_attributes) {
             $errmsg = "Missing required CAS attributes: ".implode(",", $missing_attributes);
