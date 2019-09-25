@@ -29,3 +29,23 @@ This plugin allows users to authenticate using CAS in addition to the existing e
     ```
 5. Visit http://localhost:8080/system/login
 
+## Tests
+
+- PHP 7.1 requires PHPUnit 7.x
+- PHP 7.2+ requires PHPUnit 8.x or higher
+
+To install PHPUnit 7.x via PHP Archive (PHAR):
+
+```
+$ wget -O phpunit https://phar.phpunit.de/phpunit-7.phar
+$ chmod u+x phpunit
+$ ./phpunit --version
+PHPUnit 7.5.16 by Sebastian Bergmann and contributors.
+```
+
+To run unit tests:
+
+```
+$ ./phpunit --bootstrap autoload.php tests
+```
+

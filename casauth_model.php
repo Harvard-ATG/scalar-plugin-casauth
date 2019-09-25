@@ -1,5 +1,4 @@
 <?php
-require_once dirname(__FILE__).'/casauth_exception.php';
 
 class Casauth_model extends CI_Model {
 
@@ -13,28 +12,8 @@ class Casauth_model extends CI_Model {
      */
     protected $debug = false;
 
-    /**
-     * @var string Defines the attribute to use to identify the CAS user.
-     */
-    public static $cas_id_attribute = 'eduPersonPrincipalName'; // A unique but opaque identifier for a user; generally of the form user@domain
-
-    /**
-     * @var string Defines the attribute for the CAS user's email address.
-     */
-    public static $email_attribute = 'mail';
-
-    /**
-     * @var string Defines the attribute for the CAS user's full name.
-     */
-    public static $fullname_attribute = 'displayName';
-
-    /**
-     * @var array Holds the required attributes for creating a new CAS user record.
-     */
-    public $required_attributes = array();
-
     /**#@+
-     * @var string Active record fields.
+     * @var string Active record field.
      */
     public $cas_id   = '';
     public $email = '';
@@ -51,13 +30,6 @@ class Casauth_model extends CI_Model {
      */
     function __construct() {
         parent::__construct();
-
-        $this->required_attributes = array(
-            self::$cas_id_attribute,
-            self::$email_attribute,
-            self::$fullname_attribute,
-        );
-
         $this->load->database();
         $this->db->db_debug = $this->db->db_debug || $this->debug;
         $this->table_name = $this->db->dbprefix.$this->table_name; // e.g. prefix table name with "scalar_db_"
@@ -66,13 +38,12 @@ class Casauth_model extends CI_Model {
     /**
      * Saves a CAS user.
      *
-     * @param $attributes
+     * @param Casauth_attributes $attributes
      * @throws Casauth_Exception
      */
     public function save_user($attributes) {
         error_log("Saving user: ".var_export($attributes,1));
-        $this->check_attributes($attributes);
-        $casuser = $this->find_by_cas_id($attributes[self::$cas_id_attribute]);
+        $casuser = $this->find_by_cas_id($attributes->get_cas_id());
         if(!$casuser) {
             $this->insert_user($attributes);
         }
@@ -81,24 +52,24 @@ class Casauth_model extends CI_Model {
     /**
      * Inserts a new CAS user.
      *
-     * @param $attributes
+     * @param Casauth_attributes $attributes
      * @return array
      * @throws Casauth_Exception
      */
     public function insert_user($attributes) {
         $now = date("Y-m-d H:i:s");
-        $cas_id = trim($attributes[self::$cas_id_attribute]);
-        $email = trim($attributes[self::$email_attribute]);
-        $fullname = trim($attributes[self::$fullname_attribute]);
+        $cas_id = $attributes->get_cas_id();
+        $email = $attributes->get_email();
+        $fullname = $attributes->get_fullname();
 
         if(!$cas_id) {
-            throw new Casauth_Exception("CAS attribute ".self::$cas_id_attribute. " is empty or invalid.");
+            throw new Casauth_Exception("CAS attribute ID is empty or invalid.");
         }
         if(!$email) {
-            throw new Casauth_Exception("CAS attribute".self::$email_attribute. " is empty or invalid");
+            throw new Casauth_Exception("CAS attribute email is empty or invalid");
         }
         if(!$fullname) {
-            throw new Casauth_Exception("CAS attribute".self::$fullname_attribute. " is empty or invalid");
+            throw new Casauth_Exception("CAS attribute fullname is empty or invalid");
         }
 
         $data = array(
@@ -111,23 +82,6 @@ class Casauth_model extends CI_Model {
         $this->db->insert($this->table_name, $data);
 
         return $data;
-    }
-
-    /**
-     * Checks if required attributes are present.
-     * Throws an exception if any required attributes are missing.
-     *
-     * @param $attributes
-     * @throws Casauth_Exception
-     */
-    public function check_attributes($attributes) {
-        $actual_attributes = array_keys($attributes);
-        $missing_attributes = array_diff($this->required_attributes, $actual_attributes);
-        $has_attributes = empty($missing_attributes);
-        if(!$has_attributes) {
-            $errmsg = "Missing required CAS attributes: ".implode(",", $missing_attributes);
-            throw new Casauth_Exception($errmsg);
-        }
     }
 
     /**
