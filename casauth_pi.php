@@ -1,8 +1,6 @@
 <?php
 
-require_once dirname(__FILE__).'/lib/phpCAS/CAS.php';
-require_once dirname(__FILE__).'/casauth_model.php';
-require_once dirname(__FILE__).'/casauth_exception.php';
+require_once dirname(__FILE__).'/autoload.php';
 
 /**
  * Class Casauth
@@ -38,6 +36,7 @@ class Casauth {
      */
     public $model = null;
 
+
     /**#@+
      * @var string Login states.
      */
@@ -57,28 +56,34 @@ class Casauth {
      */
     public function __construct() {
         $this->plugin_path = "system/application/plugins/{$this->plugin_name}";
-
-        $this->config = parse_ini_file(dirname(__FILE__).'/config.ini');
-        if($this->config === FALSE) {
-            throw new Exception("Casauth plugin misconfigured: config.ini required");
-        }
-
-        $this->model = $this->get_model();
     }
 
     /**
      * Initialize plugin.
      */
-    public function init() {
-        $CI =& get_instance();
-        $this->ci = $CI;
-    }
+    public function init($options=array()) {
+        if(isset($options['config'])) {
+            $this->config = $options['config'];
+        } else {
+            $this->config = parse_ini_file(dirname(__FILE__).'/config.ini');
+            if($this->config === FALSE) {
+                throw new Casauth_Exception("Casauth plugin misconfigured: config.ini required");
+            }
+        }
 
-    /**
-     * Get an instance of the model.
-     */
-    public function get_model() {
-        return new Casauth_model();
+        if(isset($options['model'])) {
+            $this->model = $options['model'];
+        } else {
+            $this->model = new Casauth_model();
+        }
+
+        if(isset($options['ci'])) {
+            $this->ci =& $options['ci'];
+        } else {
+            $CI =& get_instance(); // reference to main CI_Controller
+            $this->ci = $CI;
+        }
+        return $this;
     }
 
     /**
@@ -202,26 +207,30 @@ class Casauth {
 
         // Handle CAS authentication flow
         // See also: https://apereo.github.io/cas/5.1.x/protocol/CAS-Protocol-Specification.html
-        $attributes = array();
+        $authenticated_attributes = null;
         try {
             $this->_phpCAS_init();
             phpCAS::forceAuthentication();
-            $attributes = phpCas::getAttributes();
+            $authenticated_attributes = phpCas::getAttributes();
+            error_log("authenticated attributes: ".var_export($authenticated_attributes,1));
         } catch(CAS_Exception $e) {
             error_log($e->getMessage());
             show_error($e->getMessage());
         }
 
         try {
-            // PreAuthorize user with Scalar (check registration key)
-            list($preauthorized, $preauthorized_result) = $this->preauthorize($attributes);
-            error_log("preauthorize(): ".var_export(array($preauthorized, $preauthorized_result),1));
+            // Validate attributes
+            $attributes = new Casauth_attributes($authenticated_attributes);
+            $attributes->validate();
+
+            // Preauthorize user with Scalar (check registration key)
+            list($preauthorized, $reason) = $this->preauthorize($attributes);
+            error_log("preauthorize(): ".var_export(array($preauthorized, $reason),1));
             if(!$preauthorized) {
-                if($preauthorized_result === NULL) {
+                if($reason === NULL) {
                     $this->_redirect(self::LOGIN_STATE_REGKEY);
                 } else {
-                    $registration_key = $preauthorized_result;
-                    show_error("Access denied. Registration key [$registration_key] is not valid.", 403);
+                    show_error("Access denied. Reason: $reason", 403);
                 }
             }
 
@@ -260,25 +269,24 @@ class Casauth {
      * Note that the registration key mechanism is the same mechanism used by the standard Scalar signup
      * form (email/password).
      *
-     * @param array $attributes The attributes returned by the CAS server
+     * @param Casauth_attributes $attributes The attributes returned by the CAS server
      * @return array Returns a 2-element array: (boolean, string)
      *               When true, returns a success message
      *               When false, returns either the invalid registration key or null.
      */
     public function preauthorize($attributes) {
-        $cas_id = $attributes[Casauth_model::$cas_id_attribute];
-        $cas_email = $attributes[Casauth_model::$email_attribute];
-        error_log("preauthorize(): cas_id: $cas_id attributes:".var_export($attributes,1));
+        $cas_id = $attributes->get_cas_id();
+        $cas_email = $attributes->get_email();
 
         $casuser = $this->model->find_by_cas_id($cas_id);
         if($casuser) {
-            return array(true, "User already registered; registration key not required");
+            return array(true, "User previously authenticated; registration key not required");
         }
 
         if($cas_email) {
             $scalaruser = $this->ci->users->get_by_email($cas_email);
             if($scalaruser) {
-                return array(true, "User already registered with email; registration key not required");
+                return array(true, "User already exists with email; registration key not required");
             }
         }
 
@@ -290,7 +298,7 @@ class Casauth {
         $registration_key = $this->ci->session->userdata("{$this->plugin_name}_registration_key");
         if($registration_key) {
             if(!in_array($registration_key, $register_keys)) {
-                return array(false, $registration_key);
+                return array(false, "Invalid registration key: $registration_key");
             }
         } else {
             return array(false, null);
@@ -310,11 +318,11 @@ class Casauth {
      *
      * Note that this DOES NOT perform the actual login (e.g update the session).
      *
-     * @param array $attributes The attributes returned by the CAS server
+     * @param Casauth_attributes $attributes The attributes returned by the CAS server
      * @return array Returns a 2-element array: (boolean, string)
      */
     public function authenticate($attributes) {
-        $cas_id = $attributes[Casauth_model::$cas_id_attribute];
+        $cas_id = $attributes->get_cas_id();
         error_log("authenticate(): cas_id: $cas_id attributes:".var_export($attributes,1));
 
         // Save CAS User attributes
