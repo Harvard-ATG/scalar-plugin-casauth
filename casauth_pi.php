@@ -431,9 +431,18 @@ class Casauth {
         phpCAS::setDebug();
         phpCAS::setVerbose(true);
         phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
+
+        $service_url = null;
         if($this->config['cas_service_url']) {
-            phpCAS::setFixedServiceURL($this->config['cas_service_url']);
+            $service_url = $this->config['cas_service_url'];
+        } else if(getenv('SCALAR_CASAUTH_SERVICE_URL')) {
+            $service_url = getenv('SCALAR_CASAUTH_SERVICE_URL');
         }
+
+        if($service_url) {
+            phpCAS::setFixedServiceURL($service_url);
+        }
+
         phpCAS::setNoCasServerValidation(); // TODO: Fix this for production
 
         if(isset($this->config['cas_debug'])) {
