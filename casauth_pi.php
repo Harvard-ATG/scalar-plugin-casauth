@@ -139,8 +139,8 @@ class Casauth {
      */
     public function action_login_select() {
         $redirect_url = isset($_GET['redirect_url']) ? $_GET['redirect_url'] : '';
-        $default_login_url = confirm_slash(base_url())."system/login?state=".self::LOGIN_STATE_DEFAULT."&redirect_url=" . urlencode($redirect_url);
-        $cas_login_url = confirm_slash(base_url())."system/login?state=".self::LOGIN_STATE_CAS."&redirect_url=" . urlencode($redirect_url);
+        $default_login_url = $this->_get_base_url()."system/login?state=".self::LOGIN_STATE_DEFAULT."&redirect_url=" . urlencode($redirect_url);
+        $cas_login_url = $this->_get_base_url()."system/login?state=".self::LOGIN_STATE_CAS."&redirect_url=" . urlencode($redirect_url);
         $cas_button_text = $this->config['cas_button_text'];
         include(dirname(__FILE__).'/login_select.php');
     }
@@ -379,23 +379,30 @@ class Casauth {
         return $this->ci->users->get_by_email($casuser['email']);
     }
 
+
     /**
      * Performs the actual login by updating the session and redirecting.
      *
      * @param $scalaruser
      */
     protected function _login($scalaruser) {
-        $login_basename = confirm_slash(base_url());
+        $redirect_url = $this->ci->session->userdata("{$this->plugin_name}_redirect_url");
+        $login_base_url = $this->_get_base_url();
 
         $scalaruser->is_logged_in = true;
-        $this->ci->session->set_userdata(array($login_basename => (array) $scalaruser));
+        $this->ci->session->set_userdata($login_base_url, (array) $scalaruser);
 
-        $redirect_url = $this->ci->session->userdata("{$this->plugin_name}_redirect_url");
+        if(Casauth_utils::is_subdomain($redirect_url, $login_base_url)) {
+            $redirect_host = parse_url($redirect_url, PHP_URL_HOST);
+            $redirect_base_url = Casauth_utils::subdomain_login_basename($login_base_url, $redirect_host);
+            $this->ci->session->set_userdata($redirect_base_url, (array) $scalaruser);
+        }
+
         if($redirect_url) {
             $this->ci->session->unset_userdata("{$this->plugin_name}_redirect_url");
             header("Location: ".$redirect_url, TRUE);
         } else {
-            header("Location: ".$login_basename, TRUE);
+            header("Location: ".$login_base_url, TRUE);
         }
         exit;
     }
@@ -404,8 +411,17 @@ class Casauth {
      * Redirects to a plugin-provided URL.
      */
     protected function _redirect($login_state) {
-        header('Location: '.confirm_slash(base_url())."system/login?state=$login_state");
+        header('Location: '.$this->_get_base_url()."system/login?state=$login_state");
         exit;
+    }
+
+    /**
+     * Returns the base url of the scalar system.
+     *
+     * @return string
+     */
+    protected function _get_base_url($uri='') {
+        return confirm_slash(base_url($uri));
     }
 
     /**
@@ -415,13 +431,16 @@ class Casauth {
         phpCAS::setDebug();
         phpCAS::setVerbose(true);
         phpCAS::client(CAS_VERSION_2_0, $this->config['cas_host'], (int)$this->config['cas_port'], $this->config['cas_context']);
+        if($this->config['cas_service_url']) {
+            phpCAS::setFixedServiceURL($this->config['cas_service_url']);
+        }
         phpCAS::setNoCasServerValidation(); // TODO: Fix this for production
 
         if(isset($this->config['cas_debug'])) {
             // For debugging/testingwith local mock cas server (https://github.com/veo-labs/cas-server-mock)
             // Using this to explicitly set HTTP URLs. See also https://github.com/apereo/phpCAS/issues/27
             $cas_server = $this->config['cas_debug_server'];
-            $service = confirm_slash(base_url())."system/cas_login";
+            $service = $this->_get_base_url()."system/cas_login";
             phpCAS::setServerLoginURL("http://$cas_server/login?service=".urlencode($service));
             phpCAS::setServerServiceValidateURL("http://$cas_server/serviceValidate");
         }
