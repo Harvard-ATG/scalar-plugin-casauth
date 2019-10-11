@@ -56,7 +56,7 @@ class CasauthTest extends TestCase {
     }
 
     public function testUserPreauthorized() {
-        $test_user_record = array('user_id'=>1,'email'=>'somebody@local.domain');
+        $test_user_record = array('user_id' => 1, 'email' => 'somebody@local.domain');
         $tests = array(
             array(
                 'find_by_cas_id' => true,
@@ -95,7 +95,7 @@ class CasauthTest extends TestCase {
             ),
         );
 
-        foreach($tests as $test) {
+        foreach ($tests as $test) {
             $model_stub = $this->createMock('Mock_Casauth_model');
             $model_stub->method('find_by_cas_id')->willReturn($test['find_by_cas_id']);
             $user_stub = $this->createMock('Mock_User_model');
